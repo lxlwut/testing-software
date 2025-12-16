@@ -1,0 +1,320 @@
+// Лабораторная работа №5: АВЛ-дерево
+// Реализация сбалансированного бинарного дерева поиска для управления информацией о студентах
+
+#include <iostream>
+#include <string>
+#include <limits>
+using namespace std;
+
+// Структура для хранения информации о студенте
+struct Student {
+    int id;           // Уникальный идентификатор
+    string name;      // ФИО студента
+    int course;       // Курс обучения
+    string date;      // Дата зачисления
+    string contact;   // Контактные данные
+};
+
+// Структура узла АВЛ-дерева
+struct Node {
+    Student s;        // Данные студента
+    Node* left;       // Указатель на левое поддерево
+    Node* right;      // Указатель на правое поддерево
+    int h;            // Высота узла
+    
+    // Конструктор узла
+    Node(const Student& st) : s(st), left(nullptr), right(nullptr), h(1) {}
+};
+
+// Функция для получения высоты узла (возвращает 0 для nullptr)
+int height(Node* n) { 
+    return n ? n->h : 0; 
+}
+
+// Функция для вычисления баланс-фактора узла
+int balance(Node* n) { 
+    return height(n->left) - height(n->right); 
+}
+
+// Обновление высоты узла на основе высот потомков
+void update(Node* n) { 
+    if (n) n->h = max(height(n->left), height(n->right)) + 1; 
+}
+
+// Правый поворот (для левого левого случая)
+Node* rotateRight(Node* y) {
+    Node* x = y->left;
+    y->left = x->right;
+    x->right = y;
+    update(y); 
+    update(x);
+    return x;
+}
+
+// Левый поворот (для правого правого случая)
+Node* rotateLeft(Node* x) {
+    Node* y = x->right;
+    x->right = y->left;
+    y->left = x;
+    update(x); 
+    update(y);
+    return y;
+}
+
+// Балансировка узла (выполняет повороты при необходимости)
+Node* balanceNode(Node* n) {
+    if (!n) return n;
+    update(n);
+    int b = balance(n);
+    
+    // Левое поддерево выше (LL или LR случай)
+    if (b > 1) {
+        // LR случай: сначала левый поворот для левого потомка
+        if (balance(n->left) < 0) n->left = rotateLeft(n->left);
+        // Правый поворот для текущего узла
+        return rotateRight(n);
+    }
+    
+    // Правое поддерево выше (RR или RL случай)
+    if (b < -1) {
+        // RL случай: сначала правый поворот для правого потомка
+        if (balance(n->right) > 0) n->right = rotateRight(n->right);
+        // Левый поворот для текущего узла
+        return rotateLeft(n);
+    }
+    
+    return n; // Узел сбалансирован
+}
+
+// Вставка нового студента в дерево
+Node* insertNode(Node* root, const Student& s) {
+    if (!root) return new Node(s); // Создание нового узла, если достигли пустого места
+    
+    // Рекурсивный поиск места для вставки
+    if (s.id < root->s.id) 
+        root->left = insertNode(root->left, s);
+    else if (s.id > root->s.id) 
+        root->right = insertNode(root->right, s);
+    else 
+        return root; // ID уже существует, вставка не выполняется
+    
+    return balanceNode(root); // Балансировка после вставки
+}
+
+// Поиск узла с минимальным значением (используется при удалении)
+Node* minNode(Node* n) { 
+    return n->left ? minNode(n->left) : n; 
+}
+
+// Удаление студента по ID
+Node* deleteNode(Node* root, int id) {
+    if (!root) return nullptr; // Узел не найден
+    
+    // Рекурсивный поиск удаляемого узла
+    if (id < root->s.id) 
+        root->left = deleteNode(root->left, id);
+    else if (id > root->s.id) 
+        root->right = deleteNode(root->right, id);
+    else { // Узел найден
+        // Узел имеет 0 или 1 потомка
+        if (!root->left || !root->right) {
+            Node* t = root->left ? root->left : root->right;
+            delete root;
+            return t;
+        }
+        // Узел имеет двух потомков: находим минимальный в правом поддереве
+        Node* t = minNode(root->right);
+        root->s = t->s; // Копируем данные
+        root->right = deleteNode(root->right, t->s.id); // Удаляем дубликат
+    }
+    
+    return balanceNode(root); // Балансировка после удаления
+}
+
+// Поиск студента по ID
+Node* findNode(Node* root, int id) {
+    if (!root) return nullptr; // Узел не найден
+    if (id == root->s.id) return root; // Узел найден
+    
+    // Рекурсивный поиск в соответствующем поддереве
+    return findNode(id < root->s.id ? root->left : root->right, id);
+}
+
+// Вывод дерева в консоль в виде горизонтальной диаграммы
+void printTree(Node* n, int space = 0) {
+    if (!n) return;
+    space += 5; // Увеличиваем отступ для уровня
+    
+    // Сначала выводим правое поддерево (сверху)
+    printTree(n->right, space);
+    
+    // Выводим текущий узел
+    cout << string(space, ' ') << n->s.id << " (" << n->s.name << ")\n";
+    
+    // Затем выводим левое поддерево (снизу)
+    printTree(n->left, space);
+}
+
+// Полное удаление дерева (очистка памяти)
+void deleteTree(Node*& n) {
+    if (!n) return;
+    deleteTree(n->left);
+    deleteTree(n->right);
+    delete n;
+    n = nullptr;
+}
+
+// Ввод данных о студенте с консоли
+Student inputStudent() {
+    Student s;
+    
+    // Ввод ID с проверкой корректности
+    cout << "ID: ";
+    while (!(cin >> s.id)) {
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        cout << "Неверный ввод. Введите числовой ID: ";
+    }
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    
+    cout << "ФИО: "; 
+    getline(cin, s.name);
+    
+    // Ввод курса с проверкой корректности
+    cout << "Курс: ";
+    while (!(cin >> s.course)) {
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        cout << "Неверный ввод. Введите числовой курс: ";
+    }
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    
+    cout << "Дата зачисления: "; 
+    getline(cin, s.date);
+    
+    cout << "Контакты: "; 
+    getline(cin, s.contact);
+    
+    return s;
+}
+
+// Вывод информации о студенте
+void printStudent(const Student& s) {
+    cout << "\nID: " << s.id
+         << "\nФИО: " << s.name
+         << "\nКурс: " << s.course
+         << "\nДата: " << s.date
+         << "\nКонтакты: " << s.contact << "\n";
+}
+
+// Основная функция программы
+int main() {
+    // Настройка локализации для корректного отображения кириллицы
+    #ifdef _WIN32
+        system("chcp 1251 > nul");
+        setlocale(LC_ALL, "Russian");
+    #else
+        setlocale(LC_ALL, "");
+    #endif
+
+    Node* root = nullptr;      // Корень АВЛ-дерева
+    bool dataEntered = false;  // Флаг наличия данных
+    bool running = true;       // Флаг работы программы
+
+    // Главный цикл меню
+    while (running) {
+        cout << "\n М Е Н Ю \n";
+        cout << "1. Добавить студента\n";
+        cout << "2. Вывести информацию о студентах (дерево)\n";
+        cout << "3. Найти студента\n";
+        cout << "4. Удалить студента\n";
+        cout << "5. Очистить все данные\n";
+        cout << "6. Завершить программу\n";
+        cout << "Выполнить пункт: ";
+
+        int choice;
+        // Проверка корректности ввода пункта меню
+        if (!(cin >> choice)) {
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cout << "Неверный ввод. Повторите.\n";
+            continue;
+        }
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
+        // Обработка выбора пользователя
+        switch (choice) {
+            case 1: // Добавление студента
+                root = insertNode(root, inputStudent());
+                dataEntered = true;
+                cout << "Студент добавлен\n";
+                break;
+                
+            case 2: // Вывод дерева
+                if (!dataEntered)
+                    cout << "Данные ещё не введены\n";
+                else if (!root)
+                    cout << "Дерево пустое\n";
+                else
+                    printTree(root);
+                break;
+                
+            case 3: { // Поиск студента
+                if (!dataEntered) {
+                    cout << "Данных нет, добавьте студентов\n";
+                    break;
+                }
+                int id;
+                cout << "Введите ID студента: ";
+                if (!(cin >> id)) {
+                    cin.clear();
+                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                    cout << "Некорректный ID\n";
+                    break;
+                }
+                Node* n = findNode(root, id);
+                if (n) 
+                    printStudent(n->s);
+                else 
+                    cout << "Студент не найден\n";
+                break;
+            }
+                
+            case 4: { // Удаление студента
+                if (!dataEntered) {
+                    cout << "Нет данных для удаления\n";
+                    break;
+                }
+                int id;
+                cout << "Введите ID для удаления: ";
+                if (!(cin >> id)) {
+                    cin.clear();
+                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                    cout << "Некорректный ID\n";
+                    break;
+                }
+                root = deleteNode(root, id);
+                cout << "Готово\n";
+                break;
+            }
+                
+            case 5: // Очистка всех данных
+                deleteTree(root);
+                dataEntered = false;
+                cout << "Все данные удалены\n";
+                break;
+                
+            case 6: // Завершение программы
+                running = false;
+                cout << "Завершение программы...\n";
+                break;
+                
+            default: // Некорректный выбор
+                cout << "Попробуйте снова\n";
+        }
+    }
+    
+    // Очистка памяти перед завершением
+    deleteTree(root);
+    return 0;
+}
